@@ -54,9 +54,10 @@ export default function UserPage() {
 
       {/* ADMIN BUTTON (TOP RIGHT) */}
       <a
-        href="/admin"
+        href="/admin/login"
         className="
-          absolute top-4 right-4
+          fixed top-4 right-4
+          z-50
           flex items-center justify-center
           w-9 h-9 sm:w-10 sm:h-10
           rounded-full 
