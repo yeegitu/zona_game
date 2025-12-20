@@ -20,12 +20,13 @@ function isNowWithin(booking: any) {
   return now >= start && now < end;
 }
 
-// ✅ perbaikan: pakai NextRequest + params: Promise<{ id: string }>
+// handler PATCH /api/bookings/[id]
 export async function PATCH(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    // ambil id dari params
     const { id } = await context.params;
     const rawId = id?.trim();
 
@@ -69,7 +70,10 @@ export async function PATCH(
     }
 
     if (!booking) {
-      return NextResponse.json({ error: "Booking tidak ditemukan" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Booking tidak ditemukan" },
+        { status: 404 }
+      );
     }
 
     const _id = (booking as any)._id as any; // sudah pasti ada di dokumen
@@ -92,7 +96,10 @@ export async function PATCH(
       if (isNowWithin(booking as any)) {
         await db
           .collection<PsStatusDoc>("ps_status")
-          .updateOne({ ps: (booking as any).ps }, { $set: { status: "kosong" } });
+          .updateOne(
+            { ps: (booking as any).ps },
+            { $set: { status: "kosong" as PsStatus } }
+          );
       }
     }
 
@@ -106,7 +113,7 @@ export async function PATCH(
           .collection<PsStatusDoc>("ps_status")
           .updateOne(
             { ps: (updatedBooking as any).ps },
-            { $set: { status: "terisi" } }
+            { $set: { status: "terisi" as PsStatus } }
           );
       }
     }
