@@ -1,10 +1,16 @@
 // app/api/bookings/[id]/route.ts
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { Booking, BookingStatus, PsStatus } from "@/models/types";
 
 const ALLOWED: BookingStatus[] = ["pending", "paid", "confirmed", "cancelled"];
+
+// dokumen untuk koleksi ps_status
+type PsStatusDoc = {
+  ps: string;
+  status: PsStatus;
+};
 
 function isNowWithin(booking: any) {
   if (!booking?.startAt || !booking?.endAt) return false;
@@ -14,8 +20,17 @@ function isNowWithin(booking: any) {
   return now >= start && now < end;
 }
 
-export async function PATCH(req: Request, _ctx: { params: { id: string } }) {
+// ✅ perbaikan: pakai NextRequest + params: Promise<{ id: string }>
+export async function PATCH(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
+    const { id } = await context.params;
+    const rawId = id?.trim();
+
+    console.log("PATCH /api/bookings/[id] rawId =", rawId);
+
     const body = (await req.json()) as {
       status: BookingStatus;
       paidAmount?: number;
@@ -27,13 +42,6 @@ export async function PATCH(req: Request, _ctx: { params: { id: string } }) {
     if (!ALLOWED.includes(body.status)) {
       return NextResponse.json({ error: "Status tidak valid" }, { status: 400 });
     }
-
-    // 🔹 Ambil ID dari URL path: /api/bookings/:id
-    const url = new URL(req.url);
-    const segments = url.pathname.split("/").filter(Boolean);
-    const rawId = segments[segments.length - 1]?.trim();
-
-    console.log("PATCH /api/bookings rawId =", rawId);
 
     if (!rawId) {
       return NextResponse.json({ error: "ID kosong" }, { status: 400 });
@@ -55,9 +63,9 @@ export async function PATCH(req: Request, _ctx: { params: { id: string } }) {
 
     // 🔹 Kalau belum ketemu, coba pakai receiptNo (fallback)
     if (!booking) {
-      booking = await db.collection<Booking>("bookings").findOne({
-        receiptNo: rawId,
-      } as any);
+      booking = await db
+        .collection<Booking>("bookings")
+        .findOne({ receiptNo: rawId } as any);
     }
 
     if (!booking) {
@@ -82,10 +90,9 @@ export async function PATCH(req: Request, _ctx: { params: { id: string } }) {
     if (body.status === "cancelled") {
       // kalau booking ini sedang jalan, kosongkan
       if (isNowWithin(booking as any)) {
-        await db.collection<PsStatus>("ps_status").updateOne(
-          { ps: (booking as any).ps },
-          { $set: { status: "kosong" } }
-        );
+        await db
+          .collection<PsStatusDoc>("ps_status")
+          .updateOne({ ps: (booking as any).ps }, { $set: { status: "kosong" } });
       }
     }
 
@@ -95,18 +102,22 @@ export async function PATCH(req: Request, _ctx: { params: { id: string } }) {
         .collection<Booking>("bookings")
         .findOne({ _id } as any);
       if (updatedBooking && isNowWithin(updatedBooking as any)) {
-        await db.collection<PsStatus>("ps_status").updateOne(
-          { ps: (updatedBooking as any).ps },
-          { $set: { status: "terisi" } }
-        );
+        await db
+          .collection<PsStatusDoc>("ps_status")
+          .updateOne(
+            { ps: (updatedBooking as any).ps },
+            { $set: { status: "terisi" } }
+          );
       }
     }
 
-    const updated = await db.collection<Booking>("bookings").findOne({ _id } as any);
+    const updated = await db
+      .collection<Booking>("bookings")
+      .findOne({ _id } as any);
+
     return NextResponse.json({ success: true, booking: updated });
   } catch (err) {
     console.error("PATCH /api/bookings/[id] error:", err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
-
