@@ -4,6 +4,7 @@ import { ObjectId } from "mongodb";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { getDb } from "@/lib/mongodb";
 import type { Booking } from "@/models/types";
+import { Buffer } from "buffer";
 
 // Biar pasti pakai Node.js runtime
 export const runtime = "nodejs";
@@ -151,8 +152,9 @@ export async function GET(req: Request, context: any) {
     drawText("Harap simpan struk ini sebagai bukti pembayaran.");
 
     const pdfBytes = await pdfDoc.save();
+    const pdfBuffer = Buffer.from(pdfBytes); // 👈 bikin Buffer biar cocok sama BodyInit
 
-    return new NextResponse(pdfBytes, {
+    return new NextResponse(pdfBuffer as any, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
