@@ -14,8 +14,8 @@ type PsStatusDoc = {
 
 function isNowWithin(booking: any) {
   if (!booking?.startAt || !booking?.endAt) return false;
-  const start = new Date(booking.startAt);
-  const end = new Date(booking.endAt);
+  const start = new Date(booking.startAt ?? new Date());
+  const end = new Date(booking.endAt ?? new Date());
   const now = new Date();
   return now >= start && now < end;
 }
