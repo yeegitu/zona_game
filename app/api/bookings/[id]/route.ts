@@ -2,14 +2,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import type { Booking, BookingStatus, PsStatus } from "@/models/types";
+import type { Booking, BookingStatus } from "@/models/types";
 
 const ALLOWED: BookingStatus[] = ["pending", "paid", "confirmed", "cancelled"];
 
 // dokumen untuk koleksi ps_status
 type PsStatusDoc = {
   ps: string;
-  status: PsStatus;
+  status: "kosong" | "terisi";
 };
 
 function isNowWithin(booking: any) {
@@ -98,7 +98,7 @@ export async function PATCH(
           .collection<PsStatusDoc>("ps_status")
           .updateOne(
             { ps: (booking as any).ps },
-            { $set: { status: "kosong" as PsStatus } }
+            { $set: { status: "kosong" } }
           );
       }
     }
@@ -113,7 +113,7 @@ export async function PATCH(
           .collection<PsStatusDoc>("ps_status")
           .updateOne(
             { ps: (updatedBooking as any).ps },
-            { $set: { status: "terisi" as PsStatus } }
+            { $set: { status: "terisi" } }
           );
       }
     }
