@@ -2,11 +2,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import UploadImage from "@/components/UploadImage";
 
 type Game = {
-  _id: string; // dari API sudah string
+  _id: string;
   nama_game: string;
   gambar: string;
 };
@@ -14,7 +15,7 @@ type Game = {
 type PsStatus = "kosong" | "terisi";
 
 type PsRoom = {
-  ps: string; // misal: "Ruang 1"
+  ps: string;
   status: PsStatus;
 };
 
@@ -39,64 +40,38 @@ export default function AdminPage() {
   async function loadGames() {
     try {
       const res = await fetch("/api/games", { cache: "no-store" });
-      const data = (await res.json()) as Game[];
-      setGames(data);
+
+      let gamesData: Game[] = [];
+
+      try {
+        const raw = await res.json();
+        console.log("RAW /api/games (admin):", raw);
+
+        if (Array.isArray(raw)) {
+          gamesData = raw;
+        } else if (raw && Array.isArray((raw as any).games)) {
+          // kalau backend suatu saat pakai { games: [...] }
+          gamesData = (raw as any).games;
+        } else {
+          console.warn(
+            "Format /api/games (admin) tidak sesuai (bukan array), status:",
+            res.status
+          );
+        }
+      } catch (e) {
+        console.error("Gagal parse JSON /api/games (admin), status:", res.status);
+      }
+
+      setGames(gamesData);
     } catch (err) {
       console.error("Error load games:", err);
       setIsErrorMessage(true);
       setMessage("Gagal memuat daftar game");
+      setGames([]); // fallback aman
     } finally {
       setLoading(false);
     }
   }
-
-  // ================================
-  // STATE & LOGIC UNTUK STATUS RUANG PS
-  // ================================
-  const [psRooms, setPsRooms] = useState<PsRoom[]>([]);
-  const [selectedRoom, setSelectedRoom] = useState<PsRoom | null>(null);
-  const [selectedStatus, setSelectedStatus] = useState<PsStatus>("kosong");
-  const [statusMessage, setStatusMessage] = useState("");
-  const [statusError, setStatusError] = useState(false);
-  const [savingStatus, setSavingStatus] = useState(false);
-
-  async function loadPsRooms() {
-    try {
-      const res = await fetch("/api/ps", { cache: "no-store" });
-      const data = (await res.json()) as PsRoom[];
-
-      setPsRooms(data);
-
-      if (data.length > 0) {
-        setSelectedRoom(data[0]);
-        setSelectedStatus(data[0].status);
-      }
-    } catch (err) {
-      console.error("Error load ps rooms:", err);
-      setStatusError(true);
-      setStatusMessage("Gagal memuat status ruang");
-    }
-  }
-
-  // AUTH CHECK
-  useEffect(() => {
-    const auth =
-      typeof window !== "undefined"
-        ? localStorage.getItem("admin_auth")
-        : null;
-
-    if (auth !== "true") {
-      router.replace("/admin/login");
-    } else {
-      setAuthChecking(false);
-    }
-  }, [router]);
-
-  // LOAD DATA GAME + PS
-  useEffect(() => {
-    loadGames();
-    loadPsRooms();
-  }, []);
 
   async function simpanGame() {
     if (!namaGame || !gambar) {
@@ -134,9 +109,7 @@ export default function AdminPage() {
 
       if (res.ok) {
         setIsErrorMessage(false);
-        setMessage(
-          editingId ? "Game berhasil diupdate!" : "Game berhasil ditambahkan!"
-        );
+        setMessage(editingId ? "Game berhasil diupdate!" : "Game berhasil ditambahkan!");
         setNamaGame("");
         setGambar("");
         setEditingId(null);
@@ -198,6 +171,42 @@ export default function AdminPage() {
     }
   }
 
+  // ================================
+  // STATE & LOGIC UNTUK STATUS RUANG PS
+  // ================================
+  const [psRooms, setPsRooms] = useState<PsRoom[]>([]);
+  const [selectedRoom, setSelectedRoom] = useState<PsRoom | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<PsStatus>("kosong");
+  const [statusMessage, setStatusMessage] = useState("");
+  const [statusError, setStatusError] = useState(false);
+  const [savingStatus, setSavingStatus] = useState(false);
+
+  async function loadPsRooms() {
+    try {
+      const res = await fetch("/api/ps", { cache: "no-store" });
+      const raw = await res.json();
+
+      let roomsData: PsRoom[] = [];
+
+      if (Array.isArray(raw)) {
+        roomsData = raw as PsRoom[];
+      }
+
+      setPsRooms(roomsData);
+
+      if (roomsData.length > 0) {
+        setSelectedRoom(roomsData[0]);
+        setSelectedStatus(roomsData[0].status);
+      }
+    } catch (err) {
+      console.error("Error load ps rooms:", err);
+      setStatusError(true);
+      setStatusMessage("Gagal memuat status ruang");
+      setPsRooms([]);
+    }
+  }
+
+
   async function updateStatus() {
     if (!selectedRoom) return;
 
@@ -220,9 +229,7 @@ export default function AdminPage() {
 
         setPsRooms((prev) =>
           prev.map((room) =>
-            room.ps === selectedRoom.ps
-              ? { ...room, status: selectedStatus }
-              : room
+            room.ps === selectedRoom.ps ? { ...room, status: selectedStatus } : room
           )
         );
       } else {
@@ -237,6 +244,25 @@ export default function AdminPage() {
       setSavingStatus(false);
     }
   }
+
+  // AUTH CHECK
+  useEffect(() => {
+    const auth =
+      typeof window !== "undefined" ? localStorage.getItem("admin_auth") : null;
+
+    if (auth !== "true") {
+      router.replace("/admin/login");
+    } else {
+      setAuthChecking(false);
+    }
+  }, [router]);
+
+  // LOAD DATA GAME + PS
+  useEffect(() => {
+    loadGames();
+    loadPsRooms();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // helper class tombol glossy
   const primaryButtonClass =
@@ -265,7 +291,6 @@ export default function AdminPage() {
     "hover:shadow-[0_0_20px_rgba(248,113,113,1)] hover:translate-y-[1px] " +
     "active:scale-[0.97] transition";
 
-  // kalau masih cek auth, jangan tampilkan dashboard dulu
   if (authChecking) {
     return (
       <main className="min-h-screen flex items-center justify-center text-slate-200">
@@ -280,31 +305,36 @@ export default function AdminPage() {
         <p className="text-[10px] sm:text-xs uppercase tracking-[0.3em] text-slate-400">
           Dashboard Admin
         </p>
+
         <h1 className="text-2xl sm:text-4xl font-bold">
           Panel Game <span className="text-sky-300">Playstation</span>
         </h1>
-        <div className="flex justify-end mt-2">
+
+        <div className="flex items-center justify-end gap-2 mt-2 flex-wrap">
+          <Link href="/admin/bookings" className={neutralButtonClass}>
+            Kelola Booking →
+          </Link>
+
           <button
             onClick={() => {
               localStorage.removeItem("admin_auth");
               router.replace("/admin/login");
             }}
             className="
-      px-3 py-1.5 rounded-lg text-[11px] sm:text-sm font-semibold
-      bg-white/5 border border-white/20 
-      hover:bg-white/10 hover:border-rose-400/60 
-      text-rose-300 
-      shadow-[0_0_12px_rgba(244,63,94,0.4)]
-      backdrop-blur-xl transition
-    "
+              px-3 py-1.5 rounded-lg text-[11px] sm:text-sm font-semibold
+              bg-white/5 border border-white/20
+              hover:bg-white/10 hover:border-rose-400/60
+              text-rose-300
+              shadow-[0_0_12px_rgba(244,63,94,0.4)]
+              backdrop-blur-xl transition
+            "
           >
             Logout
           </button>
         </div>
 
         <p className="text-xs sm:text-sm text-slate-300 max-w-xl">
-          Kelola daftar game dan pantau status 4 ruang PS dalam satu layar
-          dengan tampilan neon-glass.
+          Kelola daftar game dan status ruang dalam satu layar.
         </p>
       </header>
 
@@ -315,12 +345,11 @@ export default function AdminPage() {
             <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.9)]" />
             {editingId ? "Edit Game" : "Tambah Game Baru"}
           </h2>
+
           {games.length > 0 && (
             <p className="text-[11px] sm:text-xs text-slate-300">
               Total game terdaftar:{" "}
-              <span className="font-semibold text-sky-300">
-                {games.length}
-              </span>
+              <span className="font-semibold text-sky-300">{games.length}</span>
             </p>
           )}
         </div>
@@ -344,9 +373,7 @@ export default function AdminPage() {
             </label>
 
             <div className="space-y-2">
-              <p className="font-semibold text-xs sm:text-sm text-slate-200">
-                Upload Gambar
-              </p>
+              <p className="font-semibold text-xs sm:text-sm text-slate-200">Upload Gambar</p>
               <p className="text-[11px] text-slate-400">
                 Gunakan cover game atau gambar yang mudah dikenali pengunjung.
               </p>
@@ -363,11 +390,7 @@ export default function AdminPage() {
             <p className="text-xs sm:text-sm text-slate-300">Preview</p>
             <div className="relative aspect-[4/3] w-full rounded-2xl border border-white/15 bg-black/20 flex items-center justify-center overflow-hidden">
               {gambar ? (
-                <img
-                  src={gambar}
-                  alt="Preview"
-                  className="h-full w-full object-cover"
-                />
+                <img src={gambar} alt="Preview" className="h-full w-full object-cover" />
               ) : (
                 <span className="text-[11px] text-slate-500 text-center px-4">
                   Gambar akan muncul di sini setelah diupload
@@ -379,16 +402,9 @@ export default function AdminPage() {
               <button
                 onClick={simpanGame}
                 disabled={savingGame}
-                className={
-                  primaryButtonClass +
-                  (savingGame ? " opacity-70 cursor-not-allowed" : "")
-                }
+                className={primaryButtonClass + (savingGame ? " opacity-70 cursor-not-allowed" : "")}
               >
-                {savingGame
-                  ? "Menyimpan..."
-                  : editingId
-                    ? "Update Game"
-                    : "Simpan Game"}
+                {savingGame ? "Menyimpan..." : editingId ? "Update Game" : "Simpan Game"}
               </button>
 
               {editingId && (
@@ -408,10 +424,7 @@ export default function AdminPage() {
             </div>
 
             {message && (
-              <p
-                className={`mt-2 text-[11px] sm:text-xs ${isErrorMessage ? "text-rose-400" : "text-emerald-300"
-                  }`}
-              >
+              <p className={`mt-2 text-[11px] sm:text-xs ${isErrorMessage ? "text-rose-400" : "text-emerald-300"}`}>
                 {message}
               </p>
             )}
@@ -419,7 +432,7 @@ export default function AdminPage() {
         </div>
       </section>
 
-      {/* DAFTAR GAME UNTUK ADMIN (EDIT / HAPUS) */}
+      {/* DAFTAR GAME */}
       <section className="p-4 sm:p-6 space-y-4 rounded-2xl shadow-[0_18px_45px_rgba(0,0,0,0.6)] w-full">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2">
@@ -429,9 +442,7 @@ export default function AdminPage() {
         </div>
 
         {loading ? (
-          <p className="text-xs sm:text-sm text-slate-300">
-            Memuat data game...
-          </p>
+          <p className="text-xs sm:text-sm text-slate-300">Memuat data game...</p>
         ) : games.length === 0 ? (
           <p className="text-xs sm:text-sm text-slate-400">
             Belum ada game. Tambahkan game terlebih dahulu di form atas.
@@ -445,13 +456,8 @@ export default function AdminPage() {
                            shadow-[0_14px_38px_rgba(0,0,0,0.65)]
                            overflow-hidden flex flex-col"
               >
-                {/* thumbnail kecil */}
                 <div className="relative w-full h-16 sm:h-20 bg-black/30">
-                  <img
-                    src={g.gambar}
-                    alt={g.nama_game}
-                    className="h-full w-full object-cover"
-                  />
+                  <img src={g.gambar} alt={g.nama_game} className="h-full w-full object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
                 </div>
 
@@ -460,17 +466,11 @@ export default function AdminPage() {
                     {g.nama_game}
                   </p>
                   <div className="flex gap-1 pt-1">
-                    <button
-                      onClick={() => mulaiEdit(g)}
-                      className={warningButtonClass}
-                    >
+                    <button onClick={() => mulaiEdit(g)} className={warningButtonClass}>
                       Edit
                     </button>
 
-                    <button
-                      onClick={() => hapusGame(g._id)}
-                      className={dangerButtonClass}
-                    >
+                    <button onClick={() => hapusGame(g._id)} className={dangerButtonClass}>
                       Hapus
                     </button>
                   </div>
@@ -481,7 +481,7 @@ export default function AdminPage() {
         )}
       </section>
 
-      {/* STATUS RUANG PS - 4 CARD */}
+      {/* STATUS RUANG PS */}
       <section className="p-4 sm:p-6 space-y-4 rounded-2xl shadow-[0_18px_45px_rgba(0,0,0,0.6)] w-full">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2">
@@ -495,8 +495,7 @@ export default function AdminPage() {
 
         {psRooms.length === 0 ? (
           <p className="text-xs sm:text-sm text-slate-400">
-            Belum ada data ruang. Pastikan API <code>/api/ps</code>{" "}
-            mengembalikan data.
+            Belum ada data ruang. Pastikan API <code>/api/ps</code> mengembalikan data.
           </p>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 w-full">
@@ -537,16 +536,12 @@ export default function AdminPage() {
                         }`}
                     />
                   </div>
-                  <p className="mt-2 text-sm sm:text-lg font-bold text-slate-50">
-                    {room.ps}
-                  </p>
+
+                  <p className="mt-2 text-sm sm:text-lg font-bold text-slate-50">{room.ps}</p>
+
                   <p className="mt-1 text-[11px] sm:text-xs font-semibold text-slate-200">
                     Status:{" "}
-                    <span
-                      className={
-                        isTerisi ? "text-emerald-300" : "text-sky-300"
-                      }
-                    >
+                    <span className={isTerisi ? "text-emerald-300" : "text-sky-300"}>
                       {isTerisi ? "Terisi" : "Kosong"}
                     </span>
                   </p>
@@ -560,9 +555,7 @@ export default function AdminPage() {
           <div className="mt-4 sm:mt-6 border-t border-white/10 pt-3 sm:pt-4 space-y-3">
             <p className="font-semibold text-xs sm:text-sm md:text-base">
               Ubah status untuk{" "}
-              <span className="underline decoration-sky-300">
-                {selectedRoom.ps}
-              </span>
+              <span className="underline decoration-sky-300">{selectedRoom.ps}</span>
             </p>
 
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
@@ -570,9 +563,7 @@ export default function AdminPage() {
                 <span className="text-slate-200">Status:</span>
                 <select
                   value={selectedStatus}
-                  onChange={(e) =>
-                    setSelectedStatus(e.target.value as PsStatus)
-                  }
+                  onChange={(e) => setSelectedStatus(e.target.value as PsStatus)}
                   className="border border-white/25 bg-black/30 rounded-xl px-3 py-1.5 text-xs sm:text-sm
                              focus:outline-none focus:ring-2 focus:ring-sky-400/70 focus:border-sky-300/70
                              transition text-slate-100"
@@ -596,10 +587,7 @@ export default function AdminPage() {
             </div>
 
             {statusMessage && (
-              <p
-                className={`text-[11px] sm:text-xs md:text-sm ${statusError ? "text-rose-400" : "text-emerald-300"
-                  }`}
-              >
+              <p className={`text-[11px] sm:text-xs md:text-sm ${statusError ? "text-rose-400" : "text-emerald-300"}`}>
                 {statusMessage}
               </p>
             )}
