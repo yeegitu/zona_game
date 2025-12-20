@@ -35,6 +35,8 @@ export default function AdminBookingsPage() {
   const [bookingErr, setBookingErr] = useState(false);
   const [savingBooking, setSavingBooking] = useState<string | null>(null);
 
+  const [search, setSearch] = useState(""); // 🔍 search input
+
   // auth check
   useEffect(() => {
     const auth =
@@ -159,6 +161,24 @@ export default function AdminBookingsPage() {
     );
   }, [bookings]);
 
+  // filter berdasarkan search (nama, no HP, kode booking)
+  const filteredBookings = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return sortedBookings;
+
+    return sortedBookings.filter((b) => {
+      const name = b.customerName?.toLowerCase() || "";
+      const phone = b.customerPhone || "";
+      const receipt = b.receiptNo?.toLowerCase() || "";
+
+      return (
+        name.includes(term) ||
+        phone.includes(term) ||
+        receipt.includes(term)
+      );
+    });
+  }, [sortedBookings, search]);
+
   if (authChecking) {
     return (
       <main className="min-h-screen flex items-center justify-center text-slate-200">
@@ -182,13 +202,27 @@ export default function AdminBookingsPage() {
           </p>
         </div>
 
-        <div className="flex gap-2">
-          <Link href="/admin" className={neutralButtonClass}>
-            ← Kembali ke Dashboard
-          </Link>
-          <button onClick={loadBookings} className={neutralButtonClass}>
-            Refresh
-          </button>
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+          {/* input search */}
+          <input
+            type="text"
+            placeholder="Cari nama / no HP / kode booking..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="px-3 py-2 rounded-xl text-xs sm:text-sm bg-black/40 border border-white/20
+                       text-slate-100 placeholder:text-slate-500
+                       focus:outline-none focus:ring-2 focus:ring-cyan-400/60 focus:border-cyan-300/60
+                       min-w-[220px]"
+          />
+
+          <div className="flex gap-2">
+            <Link href="/admin" className={neutralButtonClass}>
+              ← Kembali ke Dashboard
+            </Link>
+            <button onClick={loadBookings} className={neutralButtonClass}>
+              Refresh
+            </button>
+          </div>
         </div>
       </header>
 
@@ -205,12 +239,16 @@ export default function AdminBookingsPage() {
       <section className="p-4 sm:p-6 rounded-2xl shadow-[0_18px_45px_rgba(0,0,0,0.6)] w-full bg-white/5 backdrop-blur-xl border border-white/10">
         {loadingBookings ? (
           <p className="text-xs sm:text-sm text-slate-300">Memuat booking...</p>
-        ) : sortedBookings.length === 0 ? (
-          <p className="text-xs sm:text-sm text-slate-400">Belum ada booking.</p>
+        ) : filteredBookings.length === 0 ? (
+          <p className="text-xs sm:text-sm text-slate-400">
+            {search
+              ? "Tidak ada booking yang cocok dengan pencarian."
+              : "Belum ada booking."}
+          </p>
         ) : (
           // 🧩 grid: HP 2 kolom, tablet 3, laptop 4
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-            {sortedBookings.map((b) => {
+            {filteredBookings.map((b) => {
               const hasSchedule = !!b.startAt && !!b.endAt;
 
               return (
@@ -283,7 +321,9 @@ export default function AdminBookingsPage() {
                         " disabled:opacity-50 disabled:cursor-not-allowed"
                       }
                       onClick={() => updateBookingStatus(b._id, "cancelled")}
-                      disabled={savingBooking === b._id || b.status === "cancelled"}
+                      disabled={
+                        savingBooking === b._id || b.status === "cancelled"
+                      }
                     >
                       {savingBooking === b._id ? "..." : "Cancel"}
                     </button>
