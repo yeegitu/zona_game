@@ -49,22 +49,15 @@ export async function GET(
     // ==========================
     // Data untuk struk
     // ==========================
+    const start = new Date((booking as any).startAt ?? new Date());
+    const end = new Date((booking as any).endAt ?? new Date());
 
-    // pakai any supaya TS gak rewel soal Date | undefined
-    const b: any = booking;
+    const formatTime = (d: Date) =>
+      `${String(d.getHours()).padStart(2, "0")}:${String(
+        d.getMinutes()
+      ).padStart(2, "0")}`;
 
-    const start = b.startAt ? new Date(b.startAt) : null;
-    const end = b.endAt ? new Date(b.endAt) : null;
-
-    const formatTime = (d: Date | null) => {
-      if (!d) return "";
-      const hh = String(d.getHours()).padStart(2, "0");
-      const mm = String(d.getMinutes()).padStart(2, "0");
-      return `${hh}:${mm}`;
-    };
-
-    const formatDate = (d: Date | null) => {
-      if (!d) return "";
+    const formatDate = (d: Date) => {
       const yyyy = d.getFullYear();
       const mm = String(d.getMonth() + 1).padStart(2, "0");
       const dd = String(d.getDate()).padStart(2, "0");
@@ -72,29 +65,25 @@ export async function GET(
     };
 
     const receiptData = {
-      // identitas booking
-      id: (b._id || "").toString(),
-      receiptNo: b.receiptNo ?? rawId,
-      ps: b.ps,
-      customerName: b.customerName,
-      customerPhone: b.customerPhone,
-      status: b.status,
-      total: b.total,
-      hours: b.hours,
+      id: ((booking as any)._id || "").toString(),
+      receiptNo: booking.receiptNo ?? rawId,
+      ps: booking.ps,
+      customerName: booking.customerName,
+      customerPhone: booking.customerPhone,
+      status: booking.status,
+      total: booking.total,
+      hours: booking.hours,
 
-      // waktu mentah
-      startAt: b.startAt ?? null,
-      endAt: b.endAt ?? null,
+      startAt: (booking as any).startAt ?? null,
+      endAt: (booking as any).endAt ?? null,
 
-      // format untuk tampilan
       startTime: formatTime(start),
       endTime: formatTime(end),
-      date: formatDate(start || end),
+      date: formatDate(start),
 
-      // info pembayaran
-      paidAt: b.paidAt ?? null,
-      paidAmount: b.paidAmount ?? b.total,
-      createdAt: b.createdAt ?? null,
+      paidAt: (booking as any).paidAt ?? null,
+      paidAmount: (booking as any).paidAmount ?? booking.total,
+      createdAt: (booking as any).createdAt ?? null,
     };
 
     return NextResponse.json({
