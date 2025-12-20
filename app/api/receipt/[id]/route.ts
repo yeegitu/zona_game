@@ -1,18 +1,20 @@
 // app/api/receipt/[id]/route.ts
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
+import { PDFDocument, StandardFonts } from "pdf-lib";
 import { getDb } from "@/lib/mongodb";
 import type { Booking } from "@/models/types";
 
+// Biar pasti pakai Node.js runtime
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 // GET /api/receipt/[id]
 // id bisa berupa ObjectId booking atau receiptNo
-export async function GET(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+export async function GET(req: Request, context: any) {
   try {
     const { id } = await context.params;
-    const rawId = id?.trim();
+    const rawId = (id ?? "").toString().trim();
 
     if (!rawId) {
       return NextResponse.json({ error: "ID kosong" }, { status: 400 });
@@ -46,13 +48,9 @@ export async function GET(
       );
     }
 
-    // ==========================
-    // Data untuk struk
-    // ==========================
-
-    // pakai any supaya TS nggak rewel soal Date | undefined
     const anyBooking: any = booking;
 
+    // safety: kalau nggak ada start/end pakai now
     const start = new Date(anyBooking.startAt ?? new Date());
     const end = new Date(anyBooking.endAt ?? new Date());
 
@@ -68,31 +66,98 @@ export async function GET(
       return `${dd}-${mm}-${yyyy}`;
     };
 
-    const receiptData = {
-      id: (anyBooking._id || "").toString(),
-      receiptNo: anyBooking.receiptNo ?? rawId,
-      ps: anyBooking.ps,
-      customerName: anyBooking.customerName,
-      customerPhone: anyBooking.customerPhone,
-      status: anyBooking.status,
-      total: anyBooking.total,
-      hours: anyBooking.hours,
+    const receiptNo = anyBooking.receiptNo ?? rawId;
 
-      startAt: anyBooking.startAt ?? null,
-      endAt: anyBooking.endAt ?? null,
+    // ==========================
+    // Generate PDF dengan pdf-lib
+    // ==========================
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([420, 600]);
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const fontSize = 12;
 
-      startTime: formatTime(start),
-      endTime: formatTime(end),
-      date: formatDate(start),
+    let y = 560;
+    const marginX = 40;
 
-      paidAt: anyBooking.paidAt ?? null,
-      paidAmount: anyBooking.paidAmount ?? anyBooking.total,
-      createdAt: anyBooking.createdAt ?? null,
+    const drawText = (
+      text: string,
+      opts: { bold?: boolean; size?: number } = {}
+    ) => {
+      const usedFont = opts.bold ? fontBold : font;
+      const size = opts.size ?? fontSize;
+      page.drawText(text, { x: marginX, y, size, font: usedFont });
+      y -= size + 6;
     };
 
-    return NextResponse.json({
-      success: true,
-      receipt: receiptData,
+    // Header
+    drawText("ZONA GAME", { bold: true, size: 16 });
+    drawText("STRUK PEMBAYARAN", { bold: true, size: 14 });
+    y -= 10;
+
+    drawText(`No. Struk : ${receiptNo}`);
+    drawText(`Tanggal   : ${formatDate(start)}`);
+    drawText(`Jam       : ${formatTime(start)} - ${formatTime(end)}`);
+    y -= 10;
+
+    // Garis pemisah
+    page.drawLine({
+      start: { x: marginX, y },
+      end: { x: 380, y },
+      thickness: 1,
+    });
+    y -= 14;
+
+    // Detail pelanggan & booking
+    drawText(`PS / Ruang : ${anyBooking.ps}`);
+    drawText(`Nama       : ${anyBooking.customerName}`);
+    drawText(`No. HP     : ${anyBooking.customerPhone ?? "-"}`);
+    drawText(`Durasi     : ${anyBooking.hours} jam`);
+    drawText(`Status     : ${anyBooking.status}`);
+    y -= 10;
+
+    page.drawLine({
+      start: { x: marginX, y },
+      end: { x: 380, y },
+      thickness: 1,
+    });
+    y -= 14;
+
+    const rupiah = (n: number) =>
+      "Rp " + n.toLocaleString("id-ID", { minimumFractionDigits: 0 });
+
+    drawText(`Total       : ${rupiah(anyBooking.total)}`, {
+      bold: true,
+      size: 13,
+    });
+    drawText(
+      `Dibayar     : ${rupiah(
+        anyBooking.paidAmount ?? anyBooking.total ?? 0
+      )}`
+    );
+    y -= 10;
+
+    page.drawLine({
+      start: { x: marginX, y },
+      end: { x: 380, y },
+      thickness: 1,
+    });
+    y -= 20;
+
+    drawText("Terima kasih telah bermain di Zona Game!", {
+      bold: true,
+      size: 12,
+    });
+    drawText("Harap simpan struk ini sebagai bukti pembayaran.");
+
+    const pdfBytes = await pdfDoc.save();
+
+    return new NextResponse(pdfBytes, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `inline; filename="struk-${receiptNo}.pdf"`,
+      },
     });
   } catch (err) {
     console.error("GET /api/receipt/[id] error:", err);
