@@ -23,10 +23,11 @@ function isNowWithin(booking: any) {
 // id = _id (ObjectId) dari dokumen booking
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }   // 👈 perhatikan ini
 ) {
   try {
-    const id = params.id;
+    // ⬇️ params itu Promise → harus di-`await`
+    const { id } = await context.params;
 
     if (!id) {
       return NextResponse.json({ error: "ID kosong" }, { status: 400 });
@@ -68,7 +69,6 @@ export async function PATCH(
 
     const $set: Partial<Booking> = { status: body.status };
 
-    // kalau suatu saat kamu ingin pakai "paid" lagi:
     if (body.status === "paid") {
       $set.paidAt = new Date();
       $set.paidAmount =
@@ -79,9 +79,8 @@ export async function PATCH(
 
     await bookingsCol.updateOne({ _id } as any, { $set });
 
-    // sync ps_status
+    // sync ps_status kalau cancelled
     if (body.status === "cancelled") {
-      // kalau booking ini sedang jalan, kosongkan PS
       if (isNowWithin(booking as any)) {
         await psStatusCol.updateOne(
           { ps: (booking as any).ps },
@@ -90,8 +89,8 @@ export async function PATCH(
       }
     }
 
+    // sync ps_status kalau confirmed
     if (body.status === "confirmed") {
-      // ambil data terbaru
       const updatedBooking = await bookingsCol.findOne({ _id } as any);
       if (updatedBooking && isNowWithin(updatedBooking as any)) {
         await psStatusCol.updateOne(
