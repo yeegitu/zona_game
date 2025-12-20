@@ -1,48 +1,18 @@
-// app/api/bookings/[id]/route.ts
+// app/api/receipt/[id]/route.ts
 import { NextResponse, type NextRequest } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import type { Booking, BookingStatus } from "@/models/types";
+import type { Booking } from "@/models/types";
 
-const ALLOWED: BookingStatus[] = ["pending", "paid", "confirmed", "cancelled"];
-
-// dokumen untuk koleksi ps_status
-type PsStatusDoc = {
-  ps: string;
-  status: "kosong" | "terisi";
-};
-
-function isNowWithin(booking: any) {
-  if (!booking?.startAt || !booking?.endAt) return false;
-  const start = new Date(booking.startAt ?? new Date());
-  const end = new Date(booking.endAt ?? new Date());
-  const now = new Date();
-  return now >= start && now < end;
-}
-
-// handler PATCH /api/bookings/[id]
-export async function PATCH(
+// GET /api/receipt/[id]
+// id bisa berupa ObjectId booking atau receiptNo
+export async function GET(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    // ambil id dari params
     const { id } = await context.params;
     const rawId = id?.trim();
-
-    console.log("PATCH /api/bookings/[id] rawId =", rawId);
-
-    const body = (await req.json()) as {
-      status: BookingStatus;
-      paidAmount?: number;
-    };
-
-    if (!body?.status) {
-      return NextResponse.json({ error: "Status wajib" }, { status: 400 });
-    }
-    if (!ALLOWED.includes(body.status)) {
-      return NextResponse.json({ error: "Status tidak valid" }, { status: 400 });
-    }
 
     if (!rawId) {
       return NextResponse.json({ error: "ID kosong" }, { status: 400 });
@@ -50,19 +20,19 @@ export async function PATCH(
 
     const db = await getDb();
 
-    // 🔹 Cari booking: coba pakai _id dulu
     let booking: Booking | null = null;
 
+    // coba cari pakai _id dulu
     if (/^[0-9a-fA-F]{24}$/.test(rawId)) {
       try {
         const _id = new ObjectId(rawId);
         booking = await db.collection<Booking>("bookings").findOne({ _id } as any);
       } catch (e) {
-        console.error("Gagal buat ObjectId dari rawId:", rawId, e);
+        console.error("Gagal buat ObjectId dari rawId di receipt:", rawId, e);
       }
     }
 
-    // 🔹 Kalau belum ketemu, coba pakai receiptNo (fallback)
+    // kalau belum ketemu, coba pakai receiptNo
     if (!booking) {
       booking = await db
         .collection<Booking>("bookings")
@@ -76,55 +46,63 @@ export async function PATCH(
       );
     }
 
-    const _id = (booking as any)._id as any; // sudah pasti ada di dokumen
+    // ==========================
+    // Data untuk struk
+    // ==========================
 
-    const $set: Partial<Booking> = { status: body.status };
+    // pakai any supaya TS gak rewel soal Date | undefined
+    const b: any = booking;
 
-    if (body.status === "paid") {
-      $set.paidAt = new Date();
-      $set.paidAmount =
-        typeof body.paidAmount === "number" && body.paidAmount > 0
-          ? body.paidAmount
-          : (booking as any).total;
-    }
+    const start = b.startAt ? new Date(b.startAt) : null;
+    const end = b.endAt ? new Date(b.endAt) : null;
 
-    await db.collection<Booking>("bookings").updateOne({ _id } as any, { $set });
+    const formatTime = (d: Date | null) => {
+      if (!d) return "";
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      return `${hh}:${mm}`;
+    };
 
-    // ✅ sync ps_status (real-time, bukan jadwal future)
-    if (body.status === "cancelled") {
-      // kalau booking ini sedang jalan, kosongkan
-      if (isNowWithin(booking as any)) {
-        await db
-          .collection<PsStatusDoc>("ps_status")
-          .updateOne(
-            { ps: (booking as any).ps },
-            { $set: { status: "kosong" } }
-          );
-      }
-    }
+    const formatDate = (d: Date | null) => {
+      if (!d) return "";
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return `${dd}-${mm}-${yyyy}`;
+    };
 
-    if (body.status === "confirmed") {
-      // kalau confirmed dan sedang dalam sesi, set terisi
-      const updatedBooking = await db
-        .collection<Booking>("bookings")
-        .findOne({ _id } as any);
-      if (updatedBooking && isNowWithin(updatedBooking as any)) {
-        await db
-          .collection<PsStatusDoc>("ps_status")
-          .updateOne(
-            { ps: (updatedBooking as any).ps },
-            { $set: { status: "terisi" } }
-          );
-      }
-    }
+    const receiptData = {
+      // identitas booking
+      id: (b._id || "").toString(),
+      receiptNo: b.receiptNo ?? rawId,
+      ps: b.ps,
+      customerName: b.customerName,
+      customerPhone: b.customerPhone,
+      status: b.status,
+      total: b.total,
+      hours: b.hours,
 
-    const updated = await db
-      .collection<Booking>("bookings")
-      .findOne({ _id } as any);
+      // waktu mentah
+      startAt: b.startAt ?? null,
+      endAt: b.endAt ?? null,
 
-    return NextResponse.json({ success: true, booking: updated });
+      // format untuk tampilan
+      startTime: formatTime(start),
+      endTime: formatTime(end),
+      date: formatDate(start || end),
+
+      // info pembayaran
+      paidAt: b.paidAt ?? null,
+      paidAmount: b.paidAmount ?? b.total,
+      createdAt: b.createdAt ?? null,
+    };
+
+    return NextResponse.json({
+      success: true,
+      receipt: receiptData,
+    });
   } catch (err) {
-    console.error("PATCH /api/bookings/[id] error:", err);
+    console.error("GET /api/receipt/[id] error:", err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
