@@ -21,9 +21,12 @@ function isNowWithin(booking: any) {
 
 // PATCH /api/bookings/[id]
 // id = _id (ObjectId) dari dokumen booking
-export async function PATCH(req: NextRequest, context: any) {
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
-    const id = context?.params?.id as string | undefined;
+    const id = params.id;
 
     if (!id) {
       return NextResponse.json({ error: "ID kosong" }, { status: 400 });
