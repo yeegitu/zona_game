@@ -19,7 +19,7 @@ type Booking = {
   createdAt: string;
   paidAt?: string;
 
-  // ✅ jadwal main (baru)
+  // jadwal main
   startAt?: string;
   endAt?: string;
 };
@@ -145,13 +145,6 @@ export default function AdminBookingsPage() {
     "hover:shadow-[0_0_26px_rgba(56,189,248,1)] hover:translate-y-[1px] " +
     "active:scale-[0.97] transition";
 
-  const warningButtonClass =
-    "px-2.5 py-1 rounded-xl text-[10px] font-semibold text-slate-900 " +
-    "bg-gradient-to-r from-amber-300/90 via-yellow-300/90 to-orange-300/90 " +
-    "shadow-[0_0_12px_rgba(251,191,36,0.9)] border border-amber-100/80 " +
-    "hover:shadow-[0_0_18px_rgba(251,191,36,1)] hover:translate-y-[1px] " +
-    "active:scale-[0.97] transition";
-
   const dangerButtonClass =
     "px-2.5 py-1 rounded-xl text-[10px] font-semibold text-slate-50 " +
     "bg-gradient-to-r from-rose-500 via-red-500 to-orange-500 " +
@@ -159,7 +152,7 @@ export default function AdminBookingsPage() {
     "hover:shadow-[0_0_20px_rgba(248,113,113,1)] hover:translate-y-[1px] " +
     "active:scale-[0.97] transition";
 
-  // ✅ optional: urutkan terbaru dulu
+  // urutkan terbaru dulu
   const sortedBookings = useMemo(() => {
     return [...bookings].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -185,7 +178,7 @@ export default function AdminBookingsPage() {
             Daftar Booking
           </h1>
           <p className="text-xs sm:text-sm text-slate-300 mt-1">
-            Kelola pembayaran & konfirmasi booking.
+            Kelola konfirmasi & pembatalan booking.
           </p>
         </div>
 
@@ -215,69 +208,60 @@ export default function AdminBookingsPage() {
         ) : sortedBookings.length === 0 ? (
           <p className="text-xs sm:text-sm text-slate-400">Belum ada booking.</p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+          // 🧩 grid: HP 2 kolom, tablet 3, laptop 4
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
             {sortedBookings.map((b) => {
               const hasSchedule = !!b.startAt && !!b.endAt;
 
               return (
                 <div
                   key={b._id}
-                  className="rounded-2xl border border-white/12 bg-black/20 p-4 shadow-[0_14px_38px_rgba(0,0,0,0.65)]"
+                  className="rounded-2xl border border-white/12 bg-black/25 p-3 sm:p-4 shadow-[0_14px_38px_rgba(0,0,0,0.65)]"
                 >
                   <div className="space-y-1">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                    <p className="text-[9px] uppercase tracking-[0.2em] text-slate-400">
                       {b.receiptNo}
                     </p>
 
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-base font-bold text-white">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-sm sm:text-base font-bold text-white">
                         {b.customerName}
                       </p>
-                      <span className="text-xs text-slate-400">
+                      <span className="text-[11px] text-slate-400">
                         ({b.customerPhone})
                       </span>
                       <span className={statusBadge(b.status)}>{b.status}</span>
                     </div>
 
-                    <p className="text-sm text-slate-200">
+                    <p className="text-[11px] sm:text-sm text-slate-200">
                       {b.ps} • {b.hours} jam •{" "}
                       <span className="text-sky-200 font-semibold">
                         {rupiah(b.total)}
                       </span>
                     </p>
 
-                    {/* ✅ jadwal main */}
+                    {/* jadwal main */}
                     {hasSchedule ? (
-                      <p className="text-[11px] text-slate-300">
+                      <p className="text-[10px] sm:text-[11px] text-slate-300">
                         Sesi:{" "}
                         <span className="text-sky-200 font-semibold">
                           {timeOnly(b.startAt!)} → {timeOnly(b.endAt!)}
                         </span>
                       </p>
                     ) : (
-                      <p className="text-[11px] text-slate-500">
-                        Sesi: <span className="italic">belum ada jadwal (legacy)</span>
+                      <p className="text-[10px] text-slate-500">
+                        Sesi:{" "}
+                        <span className="italic">belum ada jadwal (legacy)</span>
                       </p>
                     )}
 
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-[10px] text-slate-500">
                       Dibuat: {dateTime(b.createdAt)}
                       {b.paidAt ? ` • Paid: ${dateTime(b.paidAt)}` : ""}
                     </p>
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      className={
-                        warningButtonClass +
-                        " disabled:opacity-50 disabled:cursor-not-allowed"
-                      }
-                      onClick={() => updateBookingStatus(b._id, "paid")}
-                      disabled={savingBooking === b._id || b.status !== "pending"}
-                    >
-                      {savingBooking === b._id ? "..." : "Mark Paid"}
-                    </button>
-
                     <button
                       className={
                         primaryButtonClass +
